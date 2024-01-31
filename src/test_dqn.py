@@ -75,7 +75,7 @@ def main():
         throughput_arr = []
         entropy_ = 0.5
         video_count = 0
-        reward = r.RewardMetrics()
+        rew = r.RewardMetrics(30.0, min(VIDEO_BIT_RATE), max(VIDEO_BIT_RATE))
 
         while True:  # serve video forever
             # the action is from the last decision
@@ -103,8 +103,9 @@ def main():
                 "buffer_size": buffer_size,
                 "delay": delay,
                 "video_chunk_size": video_chunk_size,
+                "next_video_chunk_sizes": next_video_chunk_sizes,
             }
-            reward = reward.calculate_reward(data)
+            reward = rew.calculate_reward(data)
 
             r_batch.append(reward)
 

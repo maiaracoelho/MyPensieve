@@ -4,7 +4,7 @@ import tensorflow.compat.v1 as tf
 import os
 import time
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 import tflearn
 
 FEATURE_NUM = 128
