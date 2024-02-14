@@ -6,8 +6,7 @@ pesos = [0.40, 0.25, 0.15, 0.20]
 pesos1 = [0.50, 0.50]
 
 REBUF_PENALTY = 4.3  # 1 sec rebuffering -> 3 Mbps
-SMOOTH_PENALTY = 1
-SMOOTH_PENALTY = 1
+SMOOTH_PENALTY = 1.0
 SEXP = 0.5
 COST = {
     300: {"c": 0.1, "j": 0.05},
@@ -41,11 +40,10 @@ class RewardMetrics:
         cost = (COST[bit_rate]["c"] + COST[bit_rate]["j"]) * segment_size
 
         totalCost = 1.0 - (float(cost) / float(maxCost))
-        print(maxCost, cost, totalCost)
         return totalCost
 
     def calculate_qoer(self, data):
-        utility = data["bit_rate"] / float(data["max_bit_rate"])
+        utility = self.calculate_bitrate_average(data["bit_rate"])  / float(data["max_bit_rate"])
         rebuf_index = 1.0 - (data["rebufering_time"] / self.bMin)
         amplitude_index = 1.0 - float(
             abs(data["bit_rate"] - data["last_bit_rate"]) / float(self.rMax - self.rMin)
@@ -59,8 +57,6 @@ class RewardMetrics:
             + pesos[2] * (amplitude_index)
             + pesos[3] * (delay_index)
         )
-        print(data)
-        print(utility, amplitude_index, rebuf_index, delay_index, qoeR)
         return qoeR
 
     def calculate_qoep(self, data):
@@ -69,9 +65,9 @@ class RewardMetrics:
         last_bit_rate = data["last_bit_rate"]
 
         reward = (
-            float(bitrate)
+            float(bitrate)/1000.0
             - REBUF_PENALTY * float(rebuffering)
-            - SMOOTH_PENALTY * float(np.abs(float(bitrate) - float(last_bit_rate)))
+            - SMOOTH_PENALTY * float(np.abs(float(bitrate) - float(last_bit_rate)))/1000.0
         )
         return reward
 
@@ -87,5 +83,7 @@ class RewardMetrics:
             return self.calculate_qoep(data)
         elif qoe_option == "qoer":
             return self.calculate_qoer(data)
-        else:
+        elif qoe_option == "qoeCost":
             return self.calculate_qoeCost(data)
+        else:
+            return self.calculate_cost(data)

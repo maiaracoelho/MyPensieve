@@ -6,7 +6,7 @@ import load_trace
 import RewardMetrics as r
 
 # bit_rate, buffer_size, next_chunk_size, bandwidth_measurement(throughput and time), chunk_til_video_end
-S_INFO = 6
+S_INFO = 7
 S_LEN = 8  # take how many frames in the past
 A_DIM = 6
 TRAIN_SEQ_LEN = 100  # take as a train batch
@@ -75,6 +75,7 @@ class ABREnv:
         state[5, -1] = np.minimum(video_chunk_remain, CHUNK_TIL_VIDEO_END_CAP) / float(
             CHUNK_TIL_VIDEO_END_CAP
         )
+        state[6, -1] = 0 / BUFFER_NORM_FACTOR
         self.state = state
 
         return state
@@ -130,6 +131,7 @@ class ABREnv:
         state[5, -1] = np.minimum(video_chunk_remain, CHUNK_TIL_VIDEO_END_CAP) / float(
             CHUNK_TIL_VIDEO_END_CAP
         )
+        state[6, -1] = rebuf / BUFFER_NORM_FACTOR  # 10 sec
 
         self.state = state
         # observation, reward, done, info = env.step(action)

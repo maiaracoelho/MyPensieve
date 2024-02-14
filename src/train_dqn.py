@@ -10,11 +10,11 @@ import tensorflow.compat.v1 as tf
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
-S_DIM = [6, 8]
+S_DIM = [7, 8]
 A_DIM = 6
 ACTOR_LR_RATE = 1e-4
 CRITIC_LR_RATE = 1e-3
-NUM_AGENTS = 6
+NUM_AGENTS = 10
 TRAIN_SEQ_LEN = 300  # take as a train batch
 TRAIN_EPOCH = 150000
 MODEL_SAVE_INTERVAL = 300

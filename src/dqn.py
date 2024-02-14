@@ -35,13 +35,16 @@ class Network:
             split_5 = tflearn.fully_connected(
                 inputs[:, 5:6, -1], FEATURE_NUM, activation="relu"
             )
+            split_6 = tflearn.fully_connected(
+                inputs[:, 6:7, -1], FEATURE_NUM, activation="relu"
+            )
 
             split_2_flat = tflearn.flatten(split_2)
             split_3_flat = tflearn.flatten(split_3)
             split_4_flat = tflearn.flatten(split_4)
 
             merge_net = tflearn.merge(
-                [split_0, split_1, split_2_flat, split_3_flat, split_4_flat, split_5],
+                [split_0, split_1, split_2_flat, split_3_flat, split_4_flat, split_5, split_6],
                 "concat",
             )
             net = tflearn.fully_connected(merge_net, FEATURE_NUM, activation="relu")
@@ -69,13 +72,16 @@ class Network:
             split_5 = tflearn.fully_connected(
                 inputs[:, 5:6, -1], FEATURE_NUM, activation="relu"
             )
+            split_6 = tflearn.fully_connected(
+                inputs[:, 6:7, -1], FEATURE_NUM, activation="relu"
+            )
 
             split_2_flat = tflearn.flatten(split_2)
             split_3_flat = tflearn.flatten(split_3)
             split_4_flat = tflearn.flatten(split_4)
 
             merge_net = tflearn.merge(
-                [split_0, split_1, split_2_flat, split_3_flat, split_4_flat, split_5],
+                [split_0, split_1, split_2_flat, split_3_flat, split_4_flat, split_5, split_6],
                 "concat",
             )
             net = tflearn.fully_connected(merge_net, FEATURE_NUM, activation="relu")
