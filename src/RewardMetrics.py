@@ -1,7 +1,7 @@
 import numpy as np
 import math
 
-qoe_option = "qoeCost"
+qoe_option = "qoer"
 pesos = [0.40, 0.25, 0.15, 0.20]
 pesos1 = [0.50, 0.50]
 

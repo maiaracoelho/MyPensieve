@@ -1,65 +1,100 @@
 import multiprocessing as mp
 import numpy as np
+import pandas as pd
+
 import logging
 import os
-import sys
+
+import tensorflow.compat.v1 as tf
+import tensorflow_probability as tfp
+
+from utils import calculate_action_probabilities, sample_actions_from_probabilities
+
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+tf.compat.v1.disable_eager_execution()
+
 from abr import ABREnv
 import ppo2 as network
-import tensorflow.compat.v1 as tf
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
-S_DIM = [7, 8]
+S_DIM = [8, 8]
 A_DIM = 6
 ACTOR_LR_RATE = 1e-4
-NUM_AGENTS = 6
-TRAIN_SEQ_LEN = 1000  # take as a train batch
-TRAIN_EPOCH = 150000
-MODEL_SAVE_INTERVAL = 300
+NUM_AGENTS = 16
+TRAIN_SEQ_LEN = 1000
+TRAIN_EPOCH = 10
+MODEL_SAVE_INTERVAL = 10
 RANDOM_SEED = 42
-SUMMARY_DIR = "./ppo"
-MODEL_DIR = "./models"
-TRAIN_TRACES = "./train/"
-TEST_LOG_FOLDER = "./test_results/"
+SUMMARY_DIR = "ppo"
+TEST_LOG_FOLDER = "test_results/"
 LOG_FILE = SUMMARY_DIR + "/log"
 PPO_TRAINING_EPO = 5
+ALGORITHM = "stallion"  ## bb|stallion|lolypop
 
-# create result directory
+# Criar diretórios necessários
 if not os.path.exists(SUMMARY_DIR):
     os.makedirs(SUMMARY_DIR)
+if not os.path.exists(TEST_LOG_FOLDER):
+    os.makedirs(TEST_LOG_FOLDER)
+if not os.path.exists(LOG_FILE):
+    os.makedirs(LOG_FILE)
 
 NN_MODEL = None
 
 
 def testing(epoch, nn_model, log_file):
-    # clean up the test results folder
-    os.system("rm -r " + TEST_LOG_FOLDER)
-    # os.system('mkdir ' + TEST_LOG_FOLDER)
+    """Função de teste para avaliar o modelo"""
+    # Limpar resultados antigos
+    for file in os.listdir(TEST_LOG_FOLDER):
+        os.remove(os.path.join(TEST_LOG_FOLDER, file))
 
-    if not os.path.exists(TEST_LOG_FOLDER):
-        os.makedirs(TEST_LOG_FOLDER)
-    # run test script
-    os.system("python test.py " + nn_model)
+    # Executar script de teste
+    os.system(f"python3 test.py {nn_model} {ALGORITHM}")
+    print("Teste concluído.")
 
-    # append test performance to the log
+    # Ler os logs com pandas
     rewards, entropies = [], []
-    test_log_files = os.listdir(TEST_LOG_FOLDER)
-    for test_log_file in test_log_files:
-        reward, entropy = [], []
-        with open(TEST_LOG_FOLDER + test_log_file, "rb") as f:
-            for line in f:
-                parse = line.split()
-                try:
-                    entropy.append(float(parse[-2]))
-                    reward.append(float(parse[-1]))
-                except IndexError:
-                    break
-        rewards.append(np.mean(reward[1:]))
-        entropies.append(np.mean(entropy[1:]))
+    for test_log_file in os.listdir(TEST_LOG_FOLDER):
+        log_path = os.path.join(TEST_LOG_FOLDER, test_log_file)
 
+        # Leitura segura do arquivo usando pandas
+        try:
+            df = pd.read_csv(log_path, header=None)
+            if df.shape[1] < 9:
+                print(f"⚠️ Arquivo incompleto detectado: {test_log_file}")
+                continue  # Ignorar arquivos incompletos
+
+            # Extrair colunas corretas
+            df.columns = [
+                "time",
+                "bitrate",
+                "buffer",
+                "rebuffering",
+                "video_chunk_size",
+                "download_time",
+                "next_video_chunk_sizes",
+                "entropy",
+                "reward",
+            ]
+
+            # Filtra apenas as colunas necessárias e remove linhas incompletas
+            df.dropna(subset=["reward", "entropy"], inplace=True)
+
+            rewards.append(df["reward"].mean())
+            entropies.append(df["entropy"].mean())
+
+        except Exception as e:
+            print(f"⚠️ Erro ao ler o arquivo {test_log_file}: {e}")
+            continue
+
+    # Verificar se há dados válidos
+    if len(rewards) == 0 or len(entropies) == 0:
+        print("⚠️ Nenhum dado de recompensa ou entropia encontrado!")
+
+    # Estatísticas das recompensas
     rewards = np.array(rewards)
-
     rewards_min = np.min(rewards)
     rewards_5per = np.percentile(rewards, 5)
     rewards_mean = np.mean(rewards)
@@ -67,55 +102,44 @@ def testing(epoch, nn_model, log_file):
     rewards_95per = np.percentile(rewards, 95)
     rewards_max = np.max(rewards)
 
+    # Escrevendo no arquivo de log
     log_file.write(
-        str(epoch)
-        + "\t"
-        + str(rewards_min)
-        + "\t"
-        + str(rewards_5per)
-        + "\t"
-        + str(rewards_mean)
-        + "\t"
-        + str(rewards_median)
-        + "\t"
-        + str(rewards_95per)
-        + "\t"
-        + str(rewards_max)
-        + "\n"
+        f"{epoch}\t{rewards_min:.2f}\t{rewards_5per:.2f}\t{rewards_mean:.2f}"
+        f"\t{rewards_median:.2f}\t{rewards_95per:.2f}\t{rewards_max:.2f}\n"
     )
     log_file.flush()
+    print(
+        f"✅ Escrevendo no log_test.txt: Época {epoch}, Recompensas {rewards_mean:.2f}"
+    )
 
     return rewards_mean, np.mean(entropies)
 
 
 def central_agent(net_params_queues, exp_queues):
+    """Agente central que coordena os parâmetros e coleta experiências"""
+
     assert len(net_params_queues) == NUM_AGENTS
     assert len(exp_queues) == NUM_AGENTS
     tf_config = tf.ConfigProto(
         intra_op_parallelism_threads=1, inter_op_parallelism_threads=1
     )
     with tf.Session(config=tf_config) as sess, open(
-        LOG_FILE + "_test.txt", "w"
+        LOG_FILE + "_" + ALGORITHM + "_test.txt", "w"
     ) as test_log_file:
         summary_ops, summary_vars = build_summaries()
-
         actor = network.Network(
             sess, state_dim=S_DIM, action_dim=A_DIM, learning_rate=ACTOR_LR_RATE
         )
-
         sess.run(tf.global_variables_initializer())
-        writer = tf.summary.FileWriter(SUMMARY_DIR, sess.graph)  # training monitor
-        saver = tf.train.Saver(max_to_keep=1000)  # save neural net parameters
+        writer = tf.summary.FileWriter(SUMMARY_DIR, sess.graph)
+        saver = tf.train.Saver(max_to_keep=1000)
 
-        # restore neural net parameters
-        nn_model = NN_MODEL
-        if nn_model is not None:  # nn_model is the path to file
-            saver.restore(sess, nn_model)
-            print("Model restored.")
+        if NN_MODEL:
+            saver.restore(sess, NN_MODEL)
+            print("Modelo restaurado.")
 
-        # while True:  # assemble experiences from agents, compute the gradients
         for epoch in range(TRAIN_EPOCH):
-            # synchronize the network parameters of work agent
+            # Sincronizar os parâmetros da rede com os agentes
             actor_net_params = actor.get_network_params()
             for i in range(NUM_AGENTS):
                 net_params_queues[i].put(actor_net_params)
@@ -123,10 +147,11 @@ def central_agent(net_params_queues, exp_queues):
             s, a, p, g = [], [], [], []
             for i in range(NUM_AGENTS):
                 s_, a_, p_, g_ = exp_queues[i].get()
-                s += s_
-                a += a_
-                p += p_
-                g += g_
+                s.extend(s_)
+                a.extend(a_)
+                p.extend(p_)
+                g.extend(g_)
+
             s_batch = np.stack(s, axis=0)
             a_batch = np.vstack(a)
             p_batch = np.vstack(p)
@@ -136,16 +161,8 @@ def central_agent(net_params_queues, exp_queues):
                 actor.train(s_batch, a_batch, p_batch, v_batch, epoch)
 
             if epoch % MODEL_SAVE_INTERVAL == 0:
-                # Save the neural net parameters to disk.
-                save_path = saver.save(
-                    sess, SUMMARY_DIR + "/nn_model_ep_" + str(epoch) + ".ckpt"
-                )
-                avg_reward, avg_entropy = testing(
-                    epoch,
-                    SUMMARY_DIR + "/nn_model_ep_" + str(epoch) + ".ckpt",
-                    test_log_file,
-                )
-
+                save_path = saver.save(sess, f"{SUMMARY_DIR}/nn_model_ep_{epoch}.ckpt")
+                avg_reward, avg_entropy = testing(epoch, save_path, test_log_file)
                 summary_str = sess.run(
                     summary_ops,
                     feed_dict={
@@ -159,39 +176,38 @@ def central_agent(net_params_queues, exp_queues):
 
 
 def agent(agent_id, net_params_queue, exp_queue):
-    env = ABREnv(agent_id)
+    """Agente individual que interage com o ambiente"""
+    env = ABREnv(ALGORITHM, agent_id)
     with tf.Session() as sess:
         actor = network.Network(
             sess, state_dim=S_DIM, action_dim=A_DIM, learning_rate=ACTOR_LR_RATE
         )
-
-        # initial synchronization of the network parameters from the coordinator
-        actor_net_params = net_params_queue.get()
-        actor.set_network_params(actor_net_params)
-
-        time_stamp = 0
+        sess.run(tf.global_variables_initializer())
 
         for epoch in range(TRAIN_EPOCH):
             obs = env.reset()
             s_batch, a_batch, p_batch, r_batch = [], [], [], []
+
             for step in range(TRAIN_SEQ_LEN):
                 s_batch.append(obs)
 
-                action_prob = actor.predict(np.reshape(obs, (1, S_DIM[0], S_DIM[1])))
+                action_prob = actor.predict(
+                    np.reshape(obs, (1, S_DIM[0], S_DIM[1]))
+                ).flatten()
+                noisy_action_prob = calculate_action_probabilities(action_prob)
+                decisions_eval = sample_actions_from_probabilities(noisy_action_prob)
 
-                # gumbel noise
-                noise = np.random.gumbel(size=len(action_prob))
-                bit_rate = np.argmax(np.log(action_prob) + noise)
+                obs, rew, done, info, action_vec = env.step(decisions_eval)
+                assert not np.any(np.isnan(obs)), "obs contém valores NaN"
+                assert not np.any(np.isinf(obs)), "obs contém valores infinitos"
 
-                obs, rew, done, info = env.step(bit_rate)
-
-                action_vec = np.zeros(A_DIM)
-                action_vec[bit_rate] = 1
                 a_batch.append(action_vec)
                 r_batch.append(rew)
                 p_batch.append(action_prob)
+
                 if done:
                     break
+
             v_batch = actor.compute_v(s_batch, a_batch, r_batch, done)
             exp_queue.put([s_batch, a_batch, p_batch, v_batch])
 
@@ -200,6 +216,7 @@ def agent(agent_id, net_params_queue, exp_queue):
 
 
 def build_summaries():
+    """Configura os summaries do TensorFlow"""
     entropy_weight = tf.Variable(0.0)
     tf.summary.scalar("Entropy Weight", entropy_weight)
     eps_total_reward = tf.Variable(0.0)
@@ -214,29 +231,22 @@ def build_summaries():
 
 
 def main():
+    """Função principal"""
     np.random.seed(RANDOM_SEED)
 
-    # inter-process communication queues
-    net_params_queues = []
-    exp_queues = []
-    for i in range(NUM_AGENTS):
-        net_params_queues.append(mp.Queue(1))
-        exp_queues.append(mp.Queue(1))
+    net_params_queues = [mp.Queue(1) for _ in range(NUM_AGENTS)]
+    exp_queues = [mp.Queue(1) for _ in range(NUM_AGENTS)]
 
-    # create a coordinator and multiple agent processes
-    # (note: threading is not desirable due to python GIL)
     coordinator = mp.Process(target=central_agent, args=(net_params_queues, exp_queues))
     coordinator.start()
 
-    agents = []
-    for i in range(NUM_AGENTS):
-        agents.append(
-            mp.Process(target=agent, args=(i, net_params_queues[i], exp_queues[i]))
-        )
-    for i in range(NUM_AGENTS):
-        agents[i].start()
+    agents = [
+        mp.Process(target=agent, args=(i, net_params_queues[i], exp_queues[i]))
+        for i in range(NUM_AGENTS)
+    ]
+    for agent_proc in agents:
+        agent_proc.start()
 
-    # wait unit training is done
     coordinator.join()
 
 

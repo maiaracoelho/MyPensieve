@@ -7,7 +7,7 @@ RANDOM_SEED = 42
 VIDEO_CHUNCK_LEN = 4000.0  # millisec, every time add this amount to buffer
 BITRATE_LEVELS = 6
 TOTAL_VIDEO_CHUNCK = 48
-BUFFER_THRESH = 60.0 * MILLISECONDS_IN_SECOND  # millisec, max buffer limit
+BUFFER_THRESH = 12.0 * MILLISECONDS_IN_SECOND  # millisec, max buffer limit
 DRAIN_BUFFER_SLEEP_TIME = 500.0  # millisec
 PACKET_PAYLOAD_PORTION = 0.95
 LINK_RTT = 80  # millisec
@@ -45,7 +45,8 @@ class Environment:
                 for line in f:
                     self.video_size[bitrate].append(int(line.split()[0]))
 
-    def get_video_chunk(self, quality):
+    def get_video_chunk(self, quality, delay_factor):
+
         assert quality >= 0
         assert quality < BITRATE_LEVELS
 
@@ -62,6 +63,7 @@ class Environment:
             packet_payload = throughput * duration * PACKET_PAYLOAD_PORTION
 
             if video_chunk_counter_sent + packet_payload > video_chunk_size:
+
                 fractional_time = (
                     (video_chunk_size - video_chunk_counter_sent)
                     / throughput
@@ -84,6 +86,8 @@ class Environment:
 
         delay *= MILLISECONDS_IN_SECOND
         delay += LINK_RTT
+
+        delay *= delay_factor
 
         # rebuffer time
         rebuf = np.maximum(delay - self.buffer_size, 0.0)
@@ -162,4 +166,5 @@ class Environment:
             next_video_chunk_sizes,
             end_of_video,
             video_chunk_remain,
+            throughput,
         )
