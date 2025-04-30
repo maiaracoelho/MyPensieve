@@ -42,6 +42,8 @@ TEST_TRACES = "./test/"
 # log in format of time_stamp bit_rate buffer_size rebuffer_time chunk_size download_time reward
 NN_MODEL = sys.argv[1]
 algorithm = sys.argv[2]
+mode = sys.argv[3]
+scen = sys.argv[4]
 
 
 def run_algorithm(algorithm, traces=TEST_TRACES):
@@ -53,6 +55,8 @@ def run_algorithm(algorithm, traces=TEST_TRACES):
     net_env = env.Environment(
         all_cooked_time=all_cooked_time, all_cooked_bw=all_cooked_bw
     )
+
+    MAX_VIDEOS = 5  # Limitar para execução rápida
 
     log_path = LOG_FILE + "_" + algorithm + "_" + all_file_names[net_env.trace_idx]
     log_file = open(log_path, "w")
@@ -105,8 +109,8 @@ def run_algorithm(algorithm, traces=TEST_TRACES):
                 min_stable_steps=2,
             )
         elif algorithm == "lolypop":
-            SIGMA_STAR = 0.2  # Limite de segmentos ignorados
-            OMEGA_STAR = 1.0  # Limite de transições de qualidade
+            SIGMA_STAR = 0.05  # Limite de segmentos ignorados
+            OMEGA_STAR = 0.1  # Limite de transições de qualidade
 
             lolypop = Lolypop(SIGMA_STAR, OMEGA_STAR, DEFAULT_QUALITY)
 
@@ -118,9 +122,11 @@ def run_algorithm(algorithm, traces=TEST_TRACES):
             action = recommended_rates * VIDEO_BIT_RATE
             a_batch.append(recommended_rates)
 
-            delay_factor = 1.0
+
             if bit_rate not in action:
-                delay_factor = 1.3  # delay maior, caso o bit_rate escolhido não esteja entre os 3 maiores
+                    delay_factor = 1.5  # delay maior, caso o bit_rate escolhido não esteja entre os 3 maiores
+            else:
+                    delay_factor = 1.0
 
             (
                 delay_ms,
@@ -144,20 +150,28 @@ def run_algorithm(algorithm, traces=TEST_TRACES):
             time_s = time_stamp_ms / 1000.0
 
             # reward is video quality - rebuffer penalty - smoothness
+
+            bitrate_arrays=[]
+            if scen=="cloud":
+                bitrate_arrays = VIDEO_BIT_RATE
+            else:
+                bitrate_arrays = action
             data = {
                 "bit_rate": VIDEO_BIT_RATE[bit_rate],
                 "rebufering_time": rebuf_s,
                 "last_bit_rate": VIDEO_BIT_RATE[last_bit_rate],
-                "max_bit_rate": np.max(VIDEO_BIT_RATE),
+                "max_bit_rate": np.max(bitrate_arrays),
                 "buffer_size": buffer_size_s,
                 "delay": delay_ms,
                 "video_chunk_size": video_chunk_size,
                 "next_video_chunk_sizes": next_video_chunk_sizes,
-                "action": action,
+                "action": bitrate_arrays,
                 "throughput": throughput_kbps,
             }
 
-            reward = rew.calculate_reward(data)
+            reward = rew.calculate_reward(data, mode, scen)
+            qoe = rew.calculate_reward(data, "qoer", scen)
+            cost = rew.calculate_reward(data, "cost", scen)
             r_batch.append(reward)
 
             # log time_stamp, bit_rate, buffer_size, reward
@@ -173,9 +187,13 @@ def run_algorithm(algorithm, traces=TEST_TRACES):
                 + ","
                 + str(video_chunk_size)
                 + ","
-                + str(delay_ms)
+                + str(delay_ms / M_IN_K)
                 + ","
                 + str(action)
+                + ","
+                + str(qoe)
+                + ","
+                + str(cost)
                 + ","
                 + str(entropy_)
                 + ","
@@ -219,10 +237,10 @@ def run_algorithm(algorithm, traces=TEST_TRACES):
             if algorithm == "bb":
                 # BB: decide baseado no buffer
                 bit_rate = bb_algo(
-                    buffer_size_s, VIDEO_BIT_RATE, DEFAULT_QUALITY, M_IN_K, BMIN
+                    buffer_size_s, VIDEO_BIT_RATE, DEFAULT_QUALITY
                 )
             elif algorithm == "stallion":
-                latency_s = delay_ms / 1000.0
+                latency_s = delay_ms / M_IN_K
                 algo_instance.update_metrics(throughput_kbps, latency_s)
                 bit_rate = algo_instance.select_quality()
             elif algorithm == "lolypop":
@@ -240,12 +258,13 @@ def run_algorithm(algorithm, traces=TEST_TRACES):
                 ]
 
                 # Atualizar transições de qualidade se necessário
-                if bit_rate != last_bit_rate and video_chunk_remain > 0:
+                if video_chunk_remain > 0:
                     current_transitions += 1 / video_chunk_remain
 
                 bit_rate = lolypop.select_representation(
                     probabilities, current_transitions
                 )
+
 
             action_prob = actor.predict(np.reshape(state, (1, S_INFO, S_LEN))).flatten()
             p_batch.append(action_prob)
@@ -254,7 +273,12 @@ def run_algorithm(algorithm, traces=TEST_TRACES):
             decisions_eval = sample_actions_from_probabilities(noisy_action_prob)
             # print("decisions_eval no test", decisions_eval)
 
-            recommended_rates = np.ones(A_DIM)
+            if scen=="cloud":
+                recommended_rates = np.zeros(A_DIM)
+            elif scen=="edge":
+                recommended_rates = np.ones(A_DIM)
+            else:
+                recommended_rates = decisions_eval
 
             entropy_ = -np.dot(action_prob, np.log(action_prob + 1e-8))
             entropy_record.append(entropy_)
@@ -282,7 +306,9 @@ def run_algorithm(algorithm, traces=TEST_TRACES):
 
                 video_count += 1
 
-                if video_count >= len(all_file_names):
+                if video_count >= min(len(all_file_names), MAX_VIDEOS):
+                    print(f"✅ Vídeo {video_count}/{len(all_file_names)} concluído")
+
                     break
 
                 log_path = (

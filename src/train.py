@@ -31,7 +31,9 @@ SUMMARY_DIR = "ppo"
 TEST_LOG_FOLDER = "test_results/"
 LOG_FILE = SUMMARY_DIR + "/log"
 PPO_TRAINING_EPO = 5
-ALGORITHM = "stallion"  ## bb|stallion|lolypop
+ALGORITHM = "bb"  ## bb|stallion|lolypop
+MODE = "qoeCost"  ## qoep|qoer|qoeCost
+SCEN = "cloud"  ## edge|cloud|learn
 
 # Criar diretórios necessários
 if not os.path.exists(SUMMARY_DIR):
@@ -51,8 +53,7 @@ def testing(epoch, nn_model, log_file):
         os.remove(os.path.join(TEST_LOG_FOLDER, file))
 
     # Executar script de teste
-    os.system(f"python3 test.py {nn_model} {ALGORITHM}")
-    print("Teste concluído.")
+    os.system(f"python3 test.py {nn_model} {ALGORITHM} {MODE} {SCEN}")
 
     # Ler os logs com pandas
     rewards, entropies = [], []
@@ -62,7 +63,7 @@ def testing(epoch, nn_model, log_file):
         # Leitura segura do arquivo usando pandas
         try:
             df = pd.read_csv(log_path, header=None)
-            if df.shape[1] < 9:
+            if df.shape[1] < 11:
                 print(f"⚠️ Arquivo incompleto detectado: {test_log_file}")
                 continue  # Ignorar arquivos incompletos
 
@@ -72,9 +73,11 @@ def testing(epoch, nn_model, log_file):
                 "bitrate",
                 "buffer",
                 "rebuffering",
-                "video_chunk_size",
-                "download_time",
-                "next_video_chunk_sizes",
+                "throughput",
+                "delay",
+                "action",
+                "qoe",
+                "cost",
                 "entropy",
                 "reward",
             ]
@@ -90,8 +93,8 @@ def testing(epoch, nn_model, log_file):
             continue
 
     # Verificar se há dados válidos
-    if len(rewards) == 0 or len(entropies) == 0:
-        print("⚠️ Nenhum dado de recompensa ou entropia encontrado!")
+    #if len(rewards) == 0 or len(entropies) == 0:
+    #    print("⚠️ Nenhum dado de recompensa ou entropia encontrado!")
 
     # Estatísticas das recompensas
     rewards = np.array(rewards)
@@ -140,6 +143,9 @@ def central_agent(net_params_queues, exp_queues):
 
         for epoch in range(TRAIN_EPOCH):
             # Sincronizar os parâmetros da rede com os agentes
+            print(
+            f"✅ Época {epoch}"
+            )
             actor_net_params = actor.get_network_params()
             for i in range(NUM_AGENTS):
                 net_params_queues[i].put(actor_net_params)
@@ -160,7 +166,7 @@ def central_agent(net_params_queues, exp_queues):
             for _ in range(PPO_TRAINING_EPO):
                 actor.train(s_batch, a_batch, p_batch, v_batch, epoch)
 
-            if epoch % MODEL_SAVE_INTERVAL == 0:
+            if epoch % MODEL_SAVE_INTERVAL == 0 or epoch == (TRAIN_EPOCH-1):
                 save_path = saver.save(sess, f"{SUMMARY_DIR}/nn_model_ep_{epoch}.ckpt")
                 avg_reward, avg_entropy = testing(epoch, save_path, test_log_file)
                 summary_str = sess.run(
@@ -177,7 +183,7 @@ def central_agent(net_params_queues, exp_queues):
 
 def agent(agent_id, net_params_queue, exp_queue):
     """Agente individual que interage com o ambiente"""
-    env = ABREnv(ALGORITHM, agent_id)
+    env = ABREnv(ALGORITHM, MODE, SCEN, agent_id)
     with tf.Session() as sess:
         actor = network.Network(
             sess, state_dim=S_DIM, action_dim=A_DIM, learning_rate=ACTOR_LR_RATE
@@ -216,18 +222,19 @@ def agent(agent_id, net_params_queue, exp_queue):
 
 
 def build_summaries():
-    """Configura os summaries do TensorFlow"""
-    entropy_weight = tf.Variable(0.0)
-    tf.summary.scalar("Entropy Weight", entropy_weight)
-    eps_total_reward = tf.Variable(0.0)
-    tf.summary.scalar("Reward", eps_total_reward)
-    entropy = tf.Variable(0.0)
-    tf.summary.scalar("Entropy", entropy)
+    entropy_weight = tf.Variable(0.0, name="entropy_weight")
+    avg_reward = tf.Variable(0.0, name="avg_reward")
+    avg_entropy = tf.Variable(0.0, name="avg_entropy")
 
-    summary_vars = [entropy_weight, eps_total_reward, entropy]
+    tf.summary.scalar("Entropy_Weight", entropy_weight)
+    tf.summary.scalar("Average_Reward", avg_reward)
+    tf.summary.scalar("Average_Entropy", avg_entropy)
+
+    summary_vars = [entropy_weight, avg_reward, avg_entropy]
     summary_ops = tf.summary.merge_all()
 
     return summary_ops, summary_vars
+
 
 
 def main():

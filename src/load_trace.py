@@ -4,17 +4,19 @@ import os
 COOKED_TRACE_FOLDER = "./train/"
 
 
-def load_trace(cooked_trace_folder=COOKED_TRACE_FOLDER):
+def load_trace(cooked_trace_folder=None):
+    if cooked_trace_folder is None:
+        cooked_trace_folder = "./train/"
+
     cooked_files = os.listdir(cooked_trace_folder)
     all_cooked_time = []
     all_cooked_bw = []
     all_file_names = []
     for cooked_file in cooked_files:
-        file_path = cooked_trace_folder + cooked_file
+        file_path = os.path.join(cooked_trace_folder, cooked_file)
         cooked_time = []
         cooked_bw = []
-        # print file_path
-        with open(file_path, "rb") as f:
+        with open(file_path, "rb") as f:  # <-- mudar para "r", modo texto
             for line in f:
                 parse = line.split()
                 cooked_time.append(float(parse[0]))

@@ -2,7 +2,7 @@ RESEVOIR = 4  # BB - 5
 CUSHION = 8  # BB - 10
 
 
-def bb_algo(buffer_size, bitrates, DEFAULT_QUALITY, M_IN_K):
+def bb_algo(buffer_size, bitrates, DEFAULT_QUALITY):
     # print("bb_algo")
     if buffer_size < RESEVOIR:
         bit_rate = DEFAULT_QUALITY

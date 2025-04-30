@@ -30,7 +30,7 @@ BMIN = 4.0
 
 
 class ABREnv:
-    def __init__(self, algorithm, random_seed=RANDOM_SEED):
+    def __init__(self, algorithm, mode, scen, random_seed=RANDOM_SEED):
         np.random.seed(random_seed)
         all_cooked_time, all_cooked_bw, _ = load_trace.load_trace()
         self.net_env = abrenv.Environment(
@@ -45,6 +45,8 @@ class ABREnv:
         self.reward = r.RewardMetrics(BMIN, min(VIDEO_BIT_RATE), max(VIDEO_BIT_RATE))
         self.state = np.zeros((S_INFO, S_LEN))
         self.algorithm = algorithm
+        self.mode = mode
+        self.scen = scen
         # self.reset()
 
     def seed(self, num):
@@ -70,8 +72,9 @@ class ABREnv:
 
         elif self.algorithm == "lolypop":
 
+
             self.algo_instance = Lolypop(
-                sigma_star=0.2, omega_star=1.0, DEFAULT_QUALITY=1
+                sigma_star=0.05, omega_star=0.1, DEFAULT_QUALITY=0
             )
 
             self.current_transitions = 0
@@ -88,6 +91,7 @@ class ABREnv:
         ) = self.net_env.get_video_chunk(self.bit_rate, 1.0)
 
         state = np.roll(self.state, -1, axis=1)
+
 
         # this should be S_INFO number of terms
         state[0, -1] = VIDEO_BIT_RATE[self.bit_rate] / float(
@@ -133,21 +137,25 @@ class ABREnv:
         self.time_stamp += delay  # in ms
         self.time_stamp += sleep_time  # in ms
 
-        # reward is video quality - rebuffer penalty - smooth penalty
+        bitrate_arrays=[]
+        if self.scen=="cloud":
+                bitrate_arrays = VIDEO_BIT_RATE
+        else:
+                bitrate_arrays = action
         data = {
             "bit_rate": VIDEO_BIT_RATE[self.bit_rate],
             "rebufering_time": rebuf,
             "last_bit_rate": VIDEO_BIT_RATE[self.last_bit_rate],
-            "max_bit_rate": np.max(VIDEO_BIT_RATE),
+            "max_bit_rate": np.max(bitrate_arrays),
             "buffer_size": self.buffer_size,
             "delay": delay,
             "video_chunk_size": video_chunk_size,
             "next_video_chunk_sizes": next_video_chunk_sizes,
-            "action": action,
+            "action": bitrate_arrays,
             "throughput": throughput,
         }
 
-        reward = self.reward.calculate_reward(data)
+        reward = self.reward.calculate_reward(data, self.mode, self.scen)
 
         state = np.roll(self.state, -1, axis=1)
 
@@ -177,32 +185,34 @@ class ABREnv:
         if self.algorithm == "bb":
             # BB: decide baseado no buffer
             self.bit_rate = bb_algo(
-                self.buffer_size, VIDEO_BIT_RATE, DEFAULT_QUALITY, M_IN_K, BMIN
+                self.buffer_size, VIDEO_BIT_RATE, DEFAULT_QUALITY
             )
         elif self.algorithm == "stallion":
-            latency_s = delay / 1000.0
+            latency_s = delay / M_IN_K
             self.algo_instance.update_metrics(throughput, latency_s)
             self.bit_rate = self.algo_instance.select_quality()
         elif self.algorithm == "lolypop":
+
+
             probabilities = [
                 (
                     min(
                         1.0,
                         self.buffer_size
-                        / (next_video_chunk_sizes[j] / self.throughput),
+                        / (next_video_chunk_sizes[j] / throughput),
                     )
-                    if self.throughput > 0
+                    if throughput > 0
                     else 0.0
                 )
                 for j in range(len(VIDEO_BIT_RATE))
             ]
 
             # Atualizar transições de qualidade se necessário
-            if self.bit_rate != self.last_bit_rate and video_chunk_remain > 0:
-                current_transitions += 1 / video_chunk_remain
+            if video_chunk_remain > 0:
+                self.current_transitions += 1 / video_chunk_remain
 
             self.bit_rate = self.algo_instance.select_representation(
-                probabilities, current_transitions
+                probabilities, self.current_transitions
             )
 
         return (state, reward, end_of_video, data, recommended_rates)

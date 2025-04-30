@@ -4,10 +4,12 @@ import math
 qoe_option = "qoer"
 pesos = [0.40, 0.25, 0.15, 0.20]
 pesos1 = [0.50, 0.50]
-
+ALPHA = 0.7
 REBUF_PENALTY = 4.3  # 1 sec rebuffering -> 3 Mbps
 SMOOTH_PENALTY = 1.0
 SEXP = 0.5
+BETA_DELAY = 2.0
+GAMMA_REBUF = 0.5
 COST = {
     300: {"c": 0.1, "j": 0.05},
     750: {"c": 0.2, "j": 0.1},
@@ -29,61 +31,89 @@ class RewardMetrics:
         self.bitrate_list.append(bit_rate)
         return sum(self.bitrate_list) / len(self.bitrate_list)
 
-    def calculate_cost(self, data):
+    def calculate_cost(self, data,scen=None):
         segment_size = float(data["video_chunk_size"])
         bit_rate = data["bit_rate"]
-        max_bit_rate = int(data["max_bit_rate"])
-        max_segment_size = float(np.max(data["next_video_chunk_sizes"]))
-        maxCost = (
-            float(COST[max_bit_rate]["c"] + COST[max_bit_rate]["j"]) * max_segment_size
-        )
-        cost = (COST[bit_rate]["c"] + COST[bit_rate]["j"]) * segment_size
+        next_video_chunk_sizes = data["next_video_chunk_sizes"]
+        cost = 0.0
+        if scen=="edge":
+            for i, rate in enumerate(COST.keys()):
+                seg_size_i = next_video_chunk_sizes[i]
+                cost += (COST[rate]["c"] + COST[rate]["j"]) * seg_size_i
+        elif scen=="cloud":
+            cost = (COST[bit_rate]["c"] + COST[bit_rate]["j"]) * segment_size
+        else:
+            cost = (COST[bit_rate]["c"] + COST[bit_rate]["j"]) * segment_size
 
-        totalCost = 1.0 - (float(cost) / float(maxCost))
-        return totalCost
+        maxCost = 0.0
+        for i, rate in enumerate(COST.keys()):
+            seg_size_i = next_video_chunk_sizes[i]
+            maxCost += (COST[rate]["c"] + COST[rate]["j"]) * seg_size_i
+
+        if maxCost < 1e-8:
+            return 0.0
+
+        C_trans = cost / maxCost
+        C_trans = np.clip(C_trans, 0.0, 1.0)
+        return C_trans
+
+    def calculate_rebuf_index(self, rebuffering_time):
+        return np.exp(-GAMMA_REBUF * rebuffering_time)
+
+    def calculate_amplitude_index(self, bit_rate, last_bit_rate, bitrates_list):
+        return np.clip(
+            1.0 - abs(bit_rate - last_bit_rate) / float(np.max(bitrates_list) - np.min(bitrates_list)),
+            0.0,
+            1.0,
+        )
+
+    def calculate_delay_index(self, delay_ms):
+        delay_in_sec = delay_ms / 1000.0
+        if delay_in_sec <= SEXP:
+            return 1.0
+        else:
+            return np.exp(-BETA_DELAY * (delay_in_sec - SEXP))
 
     def calculate_qoer(self, data):
-        utility = self.calculate_bitrate_average(data["bit_rate"])  / float(data["max_bit_rate"])
-        rebuf_index = 1.0 - (data["rebufering_time"] / self.bMin)
-        amplitude_index = 1.0 - float(
-            abs(data["bit_rate"] - data["last_bit_rate"]) / float(self.rMax - self.rMin)
-        )
-        delayInSec = data["delay"] / 1000.0
-        delay_index = 1.0 - float(abs(SEXP - delayInSec) / max(SEXP, delayInSec))
+        utility = self.calculate_bitrate_average(data["bit_rate"]) / float(data["max_bit_rate"])
+        rebuf_index = self.calculate_rebuf_index(data["rebufering_time"])
+        amplitude_index = self.calculate_amplitude_index(data["bit_rate"], data["last_bit_rate"], data["action"])
+        delay_index = self.calculate_delay_index(data["delay"])
 
         qoeR = (
             pesos[0] * utility
-            + pesos[1] * (rebuf_index)
-            + pesos[2] * (amplitude_index)
-            + pesos[3] * (delay_index)
+            + pesos[1] * rebuf_index
+            + pesos[2] * amplitude_index
+            + pesos[3] * delay_index
         )
+
         return qoeR
 
     def calculate_qoep(self, data):
         bitrate = data["bit_rate"]
         rebuffering = data["rebufering_time"]
         last_bit_rate = data["last_bit_rate"]
-
-        reward = (
-            float(bitrate)/1000.0
+        return (
+            float(bitrate) / 1000.0
             - REBUF_PENALTY * float(rebuffering)
-            - SMOOTH_PENALTY * float(np.abs(float(bitrate) - float(last_bit_rate)))/1000.0
+            - SMOOTH_PENALTY * float(np.abs(float(bitrate) - float(last_bit_rate))) / 1000.0
         )
-        return reward
 
-    def calculate_qoeCost(self, data):
-        rew = float(
-            pesos1[0] * self.calculate_qoer(data)
-            + pesos1[1] * self.calculate_cost(data)
-        )
-        return rew
+    def calculate_qoeCost(self, data, scen=None):
+        qoe = self.calculate_qoer(data)
+        cost = self.calculate_cost(data, scen)
+        qoeCost = ALPHA * qoe + (1 - ALPHA) * (1 - cost)
+        return qoeCost
 
-    def calculate_reward(self, data):
-        if qoe_option == "qoep":
+    def calculate_reward(self, data, mode, scen=None):
+        if mode == "qoep":
             return self.calculate_qoep(data)
-        elif qoe_option == "qoer":
+
+        elif mode == "qoer":
             return self.calculate_qoer(data)
-        elif qoe_option == "qoeCost":
-            return self.calculate_qoeCost(data)
+
+        elif mode == "qoeCost":
+            return self.calculate_qoeCost(data,scen)
+
         else:
-            return self.calculate_cost(data)
+            return self.calculate_cost(data, scen)
