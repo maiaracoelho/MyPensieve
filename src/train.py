@@ -63,7 +63,7 @@ def testing(epoch, nn_model, log_file):
         # Leitura segura do arquivo usando pandas
         try:
             df = pd.read_csv(log_path, header=None)
-            if df.shape[1] < 11:
+            if df.shape[1] < 12:
                 print(f"⚠️ Arquivo incompleto detectado: {test_log_file}")
                 continue  # Ignorar arquivos incompletos
 
@@ -75,6 +75,7 @@ def testing(epoch, nn_model, log_file):
                 "rebuffering",
                 "throughput",
                 "delay",
+                "throughput_kbps",
                 "action",
                 "qoe",
                 "cost",

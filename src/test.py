@@ -189,6 +189,8 @@ def run_algorithm(algorithm, traces=TEST_TRACES):
                 + ","
                 + str(delay_ms / M_IN_K)
                 + ","
+                + str(throughput_kbps)
+                + ","
                 + str(action)
                 + ","
                 + str(qoe)
