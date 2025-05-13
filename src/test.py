@@ -1,7 +1,9 @@
 import os
 import sys
+import multiprocessing as mp
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # Força CPU no processo de teste
+
 import numpy as np
 import tensorflow.compat.v1 as tf
 import tensorflow_probability as tfp
@@ -20,6 +22,8 @@ from stallion import Stallion
 from lolypop import Lolypop
 
 import fixed_env as env
+
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 
 S_INFO = 8  # bit_rate, buffer_size, next_chunk_size, bandwidth_measurement(throughput and time), chunk_til_video_end, action_vec
@@ -309,6 +313,8 @@ def run_algorithm(algorithm, traces=TEST_TRACES):
                 video_count += 1
 
                 if video_count >= min(len(all_file_names), MAX_VIDEOS):
+                #if video_count >= len(all_file_names):
+
                     print(f"✅ Vídeo {video_count}/{len(all_file_names)} concluído")
 
                     break
@@ -327,4 +333,6 @@ def main():
 
 
 if __name__ == "__main__":
+    mp.set_start_method("spawn")
     main()
+

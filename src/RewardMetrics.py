@@ -1,8 +1,7 @@
 import numpy as np
 import math
 
-qoe_option = "qoer"
-pesos = [0.40, 0.25, 0.15, 0.20]
+pesos = [0.20, 0.25, 0.15, 0.40]
 pesos1 = [0.50, 0.50]
 ALPHA = 0.7
 REBUF_PENALTY = 4.3  # 1 sec rebuffering -> 3 Mbps
@@ -60,9 +59,9 @@ class RewardMetrics:
     def calculate_rebuf_index(self, rebuffering_time):
         return np.exp(-GAMMA_REBUF * rebuffering_time)
 
-    def calculate_amplitude_index(self, bit_rate, last_bit_rate, bitrates_list):
+    def calculate_amplitude_index(self, bit_rate, last_bit_rate):
         return np.clip(
-            1.0 - abs(bit_rate - last_bit_rate) / float(np.max(bitrates_list) - np.min(bitrates_list)),
+            1.0 - abs(bit_rate - last_bit_rate) / float(self.rMax - self.rMin),
             0.0,
             1.0,
         )
@@ -75,9 +74,9 @@ class RewardMetrics:
             return np.exp(-BETA_DELAY * (delay_in_sec - SEXP))
 
     def calculate_qoer(self, data):
-        utility = self.calculate_bitrate_average(data["bit_rate"]) / float(data["max_bit_rate"])
+        utility = self.calculate_bitrate_average(data["bit_rate"]) / float(self.rMax)
         rebuf_index = self.calculate_rebuf_index(data["rebufering_time"])
-        amplitude_index = self.calculate_amplitude_index(data["bit_rate"], data["last_bit_rate"], data["action"])
+        amplitude_index = self.calculate_amplitude_index(data["bit_rate"], data["last_bit_rate"])
         delay_index = self.calculate_delay_index(data["delay"])
 
         qoeR = (

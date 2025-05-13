@@ -1,37 +1,29 @@
 import multiprocessing as mp
 import numpy as np
 import pandas as pd
-
 import logging
 import os
-
-import tensorflow.compat.v1 as tf
-import tensorflow_probability as tfp
-
-from utils import calculate_action_probabilities, sample_actions_from_probabilities
-
-tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
-tf.compat.v1.disable_eager_execution()
-
 from abr import ABREnv
-import ppo2 as network
+from utils import calculate_action_probabilities, sample_actions_from_probabilities
+from tensorflow.python.client import device_lib
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # GPU somente no central_agent
+
 
 S_DIM = [8, 8]
 A_DIM = 6
 ACTOR_LR_RATE = 1e-4
-NUM_AGENTS = 16
-TRAIN_SEQ_LEN = 1000
+NUM_AGENTS = 8
+TRAIN_SEQ_LEN = 5
 TRAIN_EPOCH = 10
-MODEL_SAVE_INTERVAL = 10
+MODEL_SAVE_INTERVAL = 5
 RANDOM_SEED = 42
 SUMMARY_DIR = "ppo"
 TEST_LOG_FOLDER = "test_results/"
 LOG_FILE = SUMMARY_DIR + "/log"
-PPO_TRAINING_EPO = 5
-ALGORITHM = "bb"  ## bb|stallion|lolypop
+PPO_TRAINING_EPO = 2
+ALGORITHM = "stallion"  ## bb|stallion|lolypop
 MODE = "qoeCost"  ## qoep|qoer|qoeCost
 SCEN = "cloud"  ## edge|cloud|learn
 
@@ -121,108 +113,133 @@ def testing(epoch, nn_model, log_file):
 
 def central_agent(net_params_queues, exp_queues):
     """Agente central que coordena os parâmetros e coleta experiências"""
+    import tensorflow.compat.v1 as tf
+    import tflearn
+    import ppo2 as network
 
-    assert len(net_params_queues) == NUM_AGENTS
-    assert len(exp_queues) == NUM_AGENTS
-    tf_config = tf.ConfigProto(
-        intra_op_parallelism_threads=1, inter_op_parallelism_threads=1
-    )
-    with tf.Session(config=tf_config) as sess, open(
-        LOG_FILE + "_" + ALGORITHM + "_test.txt", "w"
-    ) as test_log_file:
-        summary_ops, summary_vars = build_summaries()
-        actor = network.Network(
-            sess, state_dim=S_DIM, action_dim=A_DIM, learning_rate=ACTOR_LR_RATE
-        )
-        sess.run(tf.global_variables_initializer())
-        writer = tf.summary.FileWriter(SUMMARY_DIR, sess.graph)
-        saver = tf.train.Saver(max_to_keep=1000)
+    tf.compat.v1.disable_eager_execution()
+    gpu_options = tf.GPUOptions(allow_growth=True)
+    config = tf.ConfigProto(gpu_options=gpu_options, intra_op_parallelism_threads=1, inter_op_parallelism_threads=1)
 
-        if NN_MODEL:
-            saver.restore(sess, NN_MODEL)
-            print("Modelo restaurado.")
+    try:
+        assert len(net_params_queues) == NUM_AGENTS
+        assert len(exp_queues) == NUM_AGENTS
 
-        for epoch in range(TRAIN_EPOCH):
-            # Sincronizar os parâmetros da rede com os agentes
-            print(
-            f"✅ Época {epoch}"
+        print("Processo central_agent iniciado")
+        with tf.Session(config=config) as sess, open(
+            LOG_FILE + "_" + ALGORITHM + "_test.txt", "w"
+        ) as test_log_file:
+            summary_ops, summary_vars = build_summaries()
+            actor = network.Network(
+                sess, state_dim=S_DIM, action_dim=A_DIM, learning_rate=ACTOR_LR_RATE
             )
-            actor_net_params = actor.get_network_params()
-            for i in range(NUM_AGENTS):
-                net_params_queues[i].put(actor_net_params)
+            sess.run(tf.global_variables_initializer())
+            writer = tf.summary.FileWriter(SUMMARY_DIR, sess.graph)
+            saver = tf.train.Saver(max_to_keep=1000)
 
-            s, a, p, g = [], [], [], []
-            for i in range(NUM_AGENTS):
-                s_, a_, p_, g_ = exp_queues[i].get()
-                s.extend(s_)
-                a.extend(a_)
-                p.extend(p_)
-                g.extend(g_)
+            if NN_MODEL:
+                saver.restore(sess, NN_MODEL)
+                print("Modelo restaurado.")
 
-            s_batch = np.stack(s, axis=0)
-            a_batch = np.vstack(a)
-            p_batch = np.vstack(p)
-            v_batch = np.vstack(g)
+            for epoch in range(TRAIN_EPOCH):
+                # Sincronizar os parâmetros da rede com os agentes
+                print(f"✅ Época {epoch}", flush=True)
+                actor_net_params = actor.get_network_params()
+                for i in range(NUM_AGENTS):
+                    net_params_queues[i].put(actor_net_params)
 
-            for _ in range(PPO_TRAINING_EPO):
-                actor.train(s_batch, a_batch, p_batch, v_batch, epoch)
+                s, a, p, g = [], [], [], []
+                for i in range(NUM_AGENTS):
+                    s_, a_, p_, g_ = exp_queues[i].get()
+                    s.extend(s_)
+                    a.extend(a_)
+                    p.extend(p_)
+                    g.extend(g_)
 
-            if epoch % MODEL_SAVE_INTERVAL == 0 or epoch == (TRAIN_EPOCH-1):
-                save_path = saver.save(sess, f"{SUMMARY_DIR}/nn_model_ep_{epoch}.ckpt")
-                avg_reward, avg_entropy = testing(epoch, save_path, test_log_file)
-                summary_str = sess.run(
-                    summary_ops,
-                    feed_dict={
-                        summary_vars[0]: actor._entropy_weight,
-                        summary_vars[1]: avg_reward,
-                        summary_vars[2]: avg_entropy,
-                    },
-                )
-                writer.add_summary(summary_str, epoch)
-                writer.flush()
+                s_batch = np.stack(s, axis=0)
+                a_batch = np.vstack(a)
+                p_batch = np.vstack(p)
+                v_batch = np.vstack(g)
+
+                for _ in range(PPO_TRAINING_EPO):
+                    actor.train(s_batch, a_batch, p_batch, v_batch, epoch)
+
+                if epoch % MODEL_SAVE_INTERVAL == 0 or epoch == (TRAIN_EPOCH-1):
+                    save_path = saver.save(sess, f"{SUMMARY_DIR}/nn_model_ep_{epoch}.ckpt")
+                    avg_reward, avg_entropy = testing(epoch, save_path, test_log_file)
+                    summary_str = sess.run(
+                        summary_ops,
+                        feed_dict={
+                            summary_vars[0]: actor._entropy_weight,
+                            summary_vars[1]: avg_reward,
+                            summary_vars[2]: avg_entropy,
+                        },
+                    )
+                    writer.add_summary(summary_str, epoch)
+                    writer.flush()
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
 
 
 def agent(agent_id, net_params_queue, exp_queue):
     """Agente individual que interage com o ambiente"""
-    env = ABREnv(ALGORITHM, MODE, SCEN, agent_id)
-    with tf.Session() as sess:
-        actor = network.Network(
-            sess, state_dim=S_DIM, action_dim=A_DIM, learning_rate=ACTOR_LR_RATE
-        )
-        sess.run(tf.global_variables_initializer())
+    import os
+    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+    import tensorflow.compat.v1 as tf
+    import ppo2 as network
 
-        for epoch in range(TRAIN_EPOCH):
-            obs = env.reset()
-            s_batch, a_batch, p_batch, r_batch = [], [], [], []
+    from abr import ABREnv
 
-            for step in range(TRAIN_SEQ_LEN):
-                s_batch.append(obs)
+    tf.compat.v1.disable_eager_execution()
+    gpu_options = tf.GPUOptions(allow_growth=True)
+    config = tf.ConfigProto(gpu_options=gpu_options)
 
-                action_prob = actor.predict(
-                    np.reshape(obs, (1, S_DIM[0], S_DIM[1]))
-                ).flatten()
-                noisy_action_prob = calculate_action_probabilities(action_prob)
-                decisions_eval = sample_actions_from_probabilities(noisy_action_prob)
+    try:
+        env = ABREnv(ALGORITHM, MODE, SCEN, agent_id)
 
-                obs, rew, done, info, action_vec = env.step(decisions_eval)
-                assert not np.any(np.isnan(obs)), "obs contém valores NaN"
-                assert not np.any(np.isinf(obs)), "obs contém valores infinitos"
+        with tf.Session(config=config) as sess:
+            actor = network.Network(
+                sess, state_dim=S_DIM, action_dim=A_DIM, learning_rate=ACTOR_LR_RATE
+            )
+            sess.run(tf.global_variables_initializer())
+            for epoch in range(TRAIN_EPOCH):
+                obs = env.reset()
+                s_batch, a_batch, p_batch, r_batch = [], [], [], []
 
-                a_batch.append(action_vec)
-                r_batch.append(rew)
-                p_batch.append(action_prob)
+                for step in range(TRAIN_SEQ_LEN):
+                    s_batch.append(obs)
 
-                if done:
-                    break
+                    action_prob = actor.predict(
+                        np.reshape(obs, (1, S_DIM[0], S_DIM[1]))
+                    ).flatten()
+                    noisy_action_prob = calculate_action_probabilities(action_prob)
+                    decisions_eval = sample_actions_from_probabilities(noisy_action_prob)
 
-            v_batch = actor.compute_v(s_batch, a_batch, r_batch, done)
-            exp_queue.put([s_batch, a_batch, p_batch, v_batch])
+                    obs, rew, done, info, action_vec = env.step(decisions_eval)
+                    assert not np.any(np.isnan(obs)), "obs contém valores NaN"
+                    assert not np.any(np.isinf(obs)), "obs contém valores infinitos"
 
-            actor_net_params = net_params_queue.get()
-            actor.set_network_params(actor_net_params)
+                    a_batch.append(action_vec)
+                    r_batch.append(rew)
+                    p_batch.append(action_prob)
+
+                    if done:
+                        break
+
+                v_batch = actor.compute_v(s_batch, a_batch, r_batch, done)
+                exp_queue.put([s_batch, a_batch, p_batch, v_batch])
+
+                actor_net_params = net_params_queue.get()
+                actor.set_network_params(actor_net_params)
+    except Exception as e:
+        import traceback
+        print(f"❌ Erro no agent {agent_id}:", flush=True)
+        traceback.print_exc()
 
 
 def build_summaries():
+    import tensorflow.compat.v1 as tf
     entropy_weight = tf.Variable(0.0, name="entropy_weight")
     avg_reward = tf.Variable(0.0, name="avg_reward")
     avg_entropy = tf.Variable(0.0, name="avg_entropy")
@@ -259,4 +276,5 @@ def main():
 
 
 if __name__ == "__main__":
+    mp.set_start_method("spawn")
     main()

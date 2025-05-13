@@ -1,11 +1,10 @@
 import math
 import numpy as np
 import tensorflow.compat.v1 as tf
-import os
-import time
-
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 import tflearn
+
+gpu_options = tf.GPUOptions(allow_growth=True)
+config = tf.ConfigProto(gpu_options=gpu_options, intra_op_parallelism_threads=1, inter_op_parallelism_threads=1)
 
 FEATURE_NUM = 128
 ACTION_EPS = 1e-4
@@ -236,3 +235,7 @@ class Network:
             R_batch[t, 0] = r_batch[t] + GAMMA * R_batch[t + 1, 0]
 
         return list(R_batch)
+
+if __name__ == "__main__":
+    import multiprocessing as mp
+    mp.set_start_method("spawn")
