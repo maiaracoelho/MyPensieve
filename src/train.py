@@ -14,18 +14,18 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # GPU somente no central_agent
 S_DIM = [8, 8]
 A_DIM = 6
 ACTOR_LR_RATE = 1e-4
-NUM_AGENTS = 8
-TRAIN_SEQ_LEN = 5
+NUM_AGENTS = 4
+TRAIN_SEQ_LEN = 50
 TRAIN_EPOCH = 10
 MODEL_SAVE_INTERVAL = 5
 RANDOM_SEED = 42
 SUMMARY_DIR = "ppo"
 TEST_LOG_FOLDER = "test_results/"
 LOG_FILE = SUMMARY_DIR + "/log"
-PPO_TRAINING_EPO = 2
-ALGORITHM = "stallion"  ## bb|stallion|lolypop
+PPO_TRAINING_EPO = 5
+ALGORITHM = "lolypop"  ## bb|stallion|lolypop
 MODE = "qoeCost"  ## qoep|qoer|qoeCost
-SCEN = "cloud"  ## edge|cloud|learn
+SCEN = "learn"  ## edge|cloud|learn
 
 # Criar diretórios necessários
 if not os.path.exists(SUMMARY_DIR):
@@ -121,11 +121,17 @@ def central_agent(net_params_queues, exp_queues):
     gpu_options = tf.GPUOptions(allow_growth=True)
     config = tf.ConfigProto(gpu_options=gpu_options, intra_op_parallelism_threads=1, inter_op_parallelism_threads=1)
 
+    from tensorflow.python.client import device_lib
+    print(device_lib.list_local_devices())
+
     try:
         assert len(net_params_queues) == NUM_AGENTS
         assert len(exp_queues) == NUM_AGENTS
 
         print("Processo central_agent iniciado")
+        print("Algoritmo: ", ALGORITHM)
+        print("Modo: ", MODE)
+        print("Cenario: ", SCEN)
         with tf.Session(config=config) as sess, open(
             LOG_FILE + "_" + ALGORITHM + "_test.txt", "w"
         ) as test_log_file:
@@ -215,6 +221,11 @@ def agent(agent_id, net_params_queue, exp_queue):
                     ).flatten()
                     noisy_action_prob = calculate_action_probabilities(action_prob)
                     decisions_eval = sample_actions_from_probabilities(noisy_action_prob)
+
+                    if SCEN == "learn":
+                        recommended = decisions_eval
+                    else:
+                        recommended = decisions_eval  # o próprio ambiente vai decidir
 
                     obs, rew, done, info, action_vec = env.step(decisions_eval)
                     assert not np.any(np.isnan(obs)), "obs contém valores NaN"

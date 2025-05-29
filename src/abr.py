@@ -74,7 +74,7 @@ class ABREnv:
 
 
             self.algo_instance = Lolypop(
-                sigma_star=0.05, omega_star=0.1, DEFAULT_QUALITY=0
+                sigma_star=0.3, omega_star=1.0, DEFAULT_QUALITY=0
             )
 
             self.current_transitions = 0
@@ -117,11 +117,19 @@ class ABREnv:
         return
 
     def step(self, recommended_rates):
+
+        #if self.scen == "edge":
+        ##    recommended_rates = np.ones(A_DIM)  # borda tem tudo
+        #elif self.scen == "cloud":
+        #    recommended_rates = np.zeros(A_DIM)  # cloud não tem nada local
+        #elif recommended_rates is None:
+        #    raise ValueError("recommended_rates must be provided in 'learn' mode")
+
         action = recommended_rates * VIDEO_BIT_RATE
 
         delay_factor = 1.0
-        if self.bit_rate not in action:
-            delay_factor = 1.3  # delay maior, caso o bit_rate escolhido não esteja entre os 3 maiores
+        if VIDEO_BIT_RATE[self.bit_rate] not in action:
+            delay_factor = 10.0
         (
             delay,
             sleep_time,
@@ -198,14 +206,13 @@ class ABREnv:
                 (
                     min(
                         1.0,
-                        self.buffer_size
-                        / (next_video_chunk_sizes[j] / throughput),
+                        self.buffer_size / ((next_video_chunk_sizes[j] * 8) / (throughput * 1000)),
                     )
                     if throughput > 0
                     else 0.0
                 )
                 for j in range(len(VIDEO_BIT_RATE))
-            ]
+                ]
 
             # Atualizar transições de qualidade se necessário
             if video_chunk_remain > 0:

@@ -1,7 +1,7 @@
 import numpy as np
 import math
 
-pesos = [0.20, 0.25, 0.15, 0.40]
+pesos = [0.15, 0.2, 0.15, 0.50]
 pesos1 = [0.50, 0.50]
 ALPHA = 0.7
 REBUF_PENALTY = 4.3  # 1 sec rebuffering -> 3 Mbps

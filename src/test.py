@@ -62,7 +62,7 @@ def run_algorithm(algorithm, traces=TEST_TRACES):
 
     MAX_VIDEOS = 5  # Limitar para execução rápida
 
-    log_path = LOG_FILE + "_" + algorithm + "_" + all_file_names[net_env.trace_idx]
+    log_path = LOG_FILE + "_" + algorithm + "_" + scen + "_" + all_file_names[net_env.trace_idx]
     log_file = open(log_path, "w")
 
     with tf.Session() as sess:
@@ -113,8 +113,8 @@ def run_algorithm(algorithm, traces=TEST_TRACES):
                 min_stable_steps=2,
             )
         elif algorithm == "lolypop":
-            SIGMA_STAR = 0.05  # Limite de segmentos ignorados
-            OMEGA_STAR = 0.1  # Limite de transições de qualidade
+            SIGMA_STAR = 0.3  # Limite de segmentos ignorados
+            OMEGA_STAR = 1.0  # Limite de transições de qualidade
 
             lolypop = Lolypop(SIGMA_STAR, OMEGA_STAR, DEFAULT_QUALITY)
 
@@ -127,8 +127,8 @@ def run_algorithm(algorithm, traces=TEST_TRACES):
             a_batch.append(recommended_rates)
 
 
-            if bit_rate not in action:
-                    delay_factor = 1.5  # delay maior, caso o bit_rate escolhido não esteja entre os 3 maiores
+            if VIDEO_BIT_RATE[bit_rate] not in action:
+                    delay_factor = 10.0
             else:
                     delay_factor = 1.0
 
@@ -251,16 +251,15 @@ def run_algorithm(algorithm, traces=TEST_TRACES):
                 bit_rate = algo_instance.select_quality()
             elif algorithm == "lolypop":
                 probabilities = [
-                    (
-                        min(
-                            1.0,
-                            buffer_size_s
-                            / (next_video_chunk_sizes[j] / throughput_kbps),
-                        )
-                        if throughput_kbps > 0
-                        else 0.0
+                (
+                    min(
+                        1.0,
+                        buffer_size_s / ((next_video_chunk_sizes[j] * 8) / (throughput_kbps * 1000)),
                     )
-                    for j in range(len(VIDEO_BIT_RATE))
+                    if throughput_kbps > 0
+                    else 0.0
+                )
+                for j in range(len(VIDEO_BIT_RATE))
                 ]
 
                 # Atualizar transições de qualidade se necessário
@@ -320,7 +319,7 @@ def run_algorithm(algorithm, traces=TEST_TRACES):
                     break
 
                 log_path = (
-                    LOG_FILE + "_" + algorithm + "_" + all_file_names[net_env.trace_idx]
+                    LOG_FILE + "_" + algorithm + "_" + scen +  "_" + all_file_names[net_env.trace_idx]
                 )
                 log_file = open(log_path, "w")
 

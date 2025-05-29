@@ -1,0 +1,14 @@
+version: "3.9"
+
+services:
+  rl-trainer:
+    build: .
+    container_name: rl_trainer_container
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=0
+    volumes:
+      - .:/workspace/app  # Monta todo o projeto
+      - ./src/logs:/workspace/app/logs  # Logs de treino/teste
+      - ./src/test_results:/workspace/app/test_results  # Resultados de teste
+    command: python src/train.py
