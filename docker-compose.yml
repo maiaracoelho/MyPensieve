@@ -8,7 +8,12 @@ services:
     environment:
       - NVIDIA_VISIBLE_DEVICES=0
     volumes:
-      - .:/workspace/app  # Monta todo o projeto
-      - ./src/logs:/workspace/app/logs  # Logs de treino/teste
-      - ./src/test_results:/workspace/app/test_results  # Resultados de teste
+      - .:/workspace/app
+      - ./src/logs:/workspace/app/logs
+      - ./src/test_results:/workspace/app/test_results
     command: python src/train.py
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
