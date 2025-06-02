@@ -1,4 +1,5 @@
-FROM nvidia/cuda:11.2.2-cudnn8-runtime-ubuntu20.04
+# Base CUDA com menos exigências de compatibilidade
+FROM nvidia/cuda:11.2.2-runtime-ubuntu20.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -12,15 +13,17 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean
 
 # Symlink para "python"
-RUN ln -s /usr/bin/python3.8 /usr/bin/python
+RUN ln -s /usr/bin/python3.8 /usr/bin/python || true
 
-# Copia arquivos
+# Define diretório de trabalho
 WORKDIR /workspace/app
+
+# Copia os arquivos da aplicação
 COPY . .
 
-# Instala pacotes
+# Atualiza o pip e instala as dependências
 RUN pip install --upgrade pip
 RUN pip install -r requirements.txt
 
-# Comando default
+# Comando padrão para rodar o experimento
 CMD ["python", "src/train.py"]
