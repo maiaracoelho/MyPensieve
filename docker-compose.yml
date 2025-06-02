@@ -9,7 +9,10 @@ services:
       - NVIDIA_VISIBLE_DEVICES=0
     volumes:
       - .:/workspace/app
-      - ./src/logs:/workspace/app/logs
+      - ./src/ppo:/workspace/app/logs
       - ./src/test_results:/workspace/app/test_results
       - ./src/train:/workspace/app/train
+      - ./src/envivio:/workspace/app/envivio
+      - ./src/pretrain:/workspace/app/pretrain
+      - ./src/test:/workspace/app/test
     command: python src/train.py
