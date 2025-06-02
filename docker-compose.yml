@@ -15,4 +15,4 @@ services:
       - ./src/envivio:/workspace/app/envivio
       - ./src/pretrain:/workspace/app/pretrain
       - ./src/test:/workspace/app/test
-    command: python src/train.py
+    command: python train.py
