@@ -11,4 +11,5 @@ services:
       - .:/workspace/app
       - ./src/logs:/workspace/app/logs
       - ./src/test_results:/workspace/app/test_results
+      - ./src/train:/workspace/app/train
     command: python src/train.py
