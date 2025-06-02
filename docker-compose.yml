@@ -1,4 +1,4 @@
-version: "3.9"
+version: "3.8"  # 3.9 ou 3.8, tanto faz
 
 services:
   rl-trainer:
@@ -12,8 +12,3 @@ services:
       - ./src/logs:/workspace/app/logs
       - ./src/test_results:/workspace/app/test_results
     command: python src/train.py
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - capabilities: [gpu]
