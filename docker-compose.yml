@@ -2,7 +2,6 @@ version: "3.8"  # 3.9 ou 3.8, tanto faz
 
 services:
   rl-trainer:
-    rl-trainer:
     image: rl-trainer
     build:
       context: .
