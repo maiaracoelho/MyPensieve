@@ -2,7 +2,11 @@ version: "3.8"  # 3.9 ou 3.8, tanto faz
 
 services:
   rl-trainer:
-    build: .
+    rl-trainer:
+    image: rl-trainer
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: rl_trainer_container
     runtime: nvidia
     environment:
