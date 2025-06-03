@@ -12,7 +12,8 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Symlink para chamar python e pip
-RUN ln -s /usr/bin/python3.8 /usr/bin/python && ln -s /usr/bin/pip3 /usr/bin/pip
+RUN [ ! -e /usr/bin/python ] && ln -s /usr/bin/python3.8 /usr/bin/python || true
+RUN [ ! -e /usr/bin/pip ] && ln -s /usr/bin/pip3 /usr/bin/pip || true
 
 # Cria diretório de trabalho
 WORKDIR /workspace/app
