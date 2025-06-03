@@ -1,24 +1,28 @@
-FROM tensorflow/tensorflow:2.4.1-gpu
+FROM nvidia/cuda:11.0.3-cudnn8-runtime-ubuntu20.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Instala dependências do sistema
+# Instalações mínimas sem depender do repositório da NVIDIA
 RUN apt-get update && apt-get install -y \
+    python3.8 \
     python3-pip \
     python3-dev \
-    git \
     build-essential \
-    && apt-get clean
+    git \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Define diretório de trabalho
+# Symlink para chamar python e pip
+RUN ln -s /usr/bin/python3.8 /usr/bin/python && ln -s /usr/bin/pip3 /usr/bin/pip
+
+# Cria diretório de trabalho
 WORKDIR /workspace/app
 
 # Copia os arquivos do projeto
 COPY . .
 
-# Instala dependências Python
-RUN pip install --upgrade pip
-RUN pip install -r requirements.txt
+# Instala dependências (ajustadas)
+COPY requirements.txt .
+RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
 # Comando padrão
 CMD ["python", "src/train.py"]
