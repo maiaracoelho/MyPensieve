@@ -25,7 +25,7 @@ LOG_FILE = SUMMARY_DIR + "/log"
 PPO_TRAINING_EPO = 5
 ALGORITHM = "lolypop"  ## bb|stallion|lolypop
 MODE = "qoeCost"  ## qoep|qoer|qoeCost
-SCEN = "edge"  ## edge|cloud|learn
+SCEN = "learn"  ## edge|cloud|learn
 
 # Criar diretórios necessários
 if not os.path.exists(SUMMARY_DIR):
@@ -41,8 +41,8 @@ NN_MODEL = None
 def testing(epoch, nn_model, log_file):
     """Função de teste para avaliar o modelo"""
     # Limpar resultados antigos
-    for file in os.listdir(TEST_LOG_FOLDER):
-        os.remove(os.path.join(TEST_LOG_FOLDER, file))
+    #for file in os.listdir(TEST_LOG_FOLDER):
+    #    os.remove(os.path.join(TEST_LOG_FOLDER, file))
 
     # Executar script de teste
     os.system(f"python3 test.py {nn_model} {ALGORITHM} {MODE} {SCEN}")
