@@ -15,9 +15,9 @@ S_DIM = [8, 8]
 A_DIM = 6
 ACTOR_LR_RATE = 1e-4
 NUM_AGENTS = 4
-TRAIN_SEQ_LEN = 50
-TRAIN_EPOCH = 10
-MODEL_SAVE_INTERVAL = 5
+TRAIN_SEQ_LEN = 20
+TRAIN_EPOCH = 200
+MODEL_SAVE_INTERVAL = 20
 RANDOM_SEED = 42
 SUMMARY_DIR = "ppo"
 TEST_LOG_FOLDER = "test_results/"
@@ -25,7 +25,7 @@ LOG_FILE = SUMMARY_DIR + "/log"
 PPO_TRAINING_EPO = 5
 ALGORITHM = "lolypop"  ## bb|stallion|lolypop
 MODE = "qoeCost"  ## qoep|qoer|qoeCost
-SCEN = "learn"  ## edge|cloud|learn
+SCEN = "edge"  ## edge|cloud|learn
 
 # Criar diretórios necessários
 if not os.path.exists(SUMMARY_DIR):
