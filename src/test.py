@@ -311,8 +311,8 @@ def run_algorithm(algorithm, traces=TEST_TRACES):
 
                 video_count += 1
 
-                if video_count >= min(len(all_file_names), MAX_VIDEOS):
-                #if video_count >= len(all_file_names):
+                #if video_count >= min(len(all_file_names), MAX_VIDEOS):
+                if video_count >= len(all_file_names):
 
                     print(f"✅ Vídeo {video_count}/{len(all_file_names)} concluído")
 
