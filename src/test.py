@@ -60,7 +60,7 @@ def run_algorithm(algorithm, traces=TEST_TRACES):
         all_cooked_time=all_cooked_time, all_cooked_bw=all_cooked_bw
     )
 
-    #MAX_VIDEOS = 5  # Limitar para execução rápida
+    MAX_VIDEOS = 5  # Limitar para execução rápida
 
     log_path = LOG_FILE + "_" + algorithm + "_" + scen + "_" + all_file_names[net_env.trace_idx]
     log_file = open(log_path, "w")
@@ -232,7 +232,7 @@ def run_algorithm(algorithm, traces=TEST_TRACES):
                 video_chunk_remain, CHUNK_TIL_VIDEO_END_CAP
             ) / float(CHUNK_TIL_VIDEO_END_CAP)
             state[6, -1] = rebuf_s / BUFFER_NORM_FACTOR  # 10 sec
-            state[7, :A_DIM] = action / M_IN_K / M_IN_K
+            state[7, :A_DIM] = action / np.max(VIDEO_BIT_RATE)
             assert not np.any(np.isnan(state)), "Inputs têm valores NaN"
             assert not np.any(np.isinf(state)), "Inputs têm valores infinitos"
 
@@ -311,8 +311,8 @@ def run_algorithm(algorithm, traces=TEST_TRACES):
 
                 video_count += 1
 
-                #if video_count >= min(len(all_file_names), MAX_VIDEOS):
-                if video_count >= len(all_file_names):
+                if video_count >= min(len(all_file_names), MAX_VIDEOS):
+                #if video_count >= len(all_file_names):
 
                     print(f"✅ Vídeo {video_count}/{len(all_file_names)} concluído")
 

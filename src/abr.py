@@ -181,7 +181,7 @@ class ABREnv:
             CHUNK_TIL_VIDEO_END_CAP
         )
         state[6, -1] = rebuf / BUFFER_NORM_FACTOR  # 10 sec
-        state[7, :A_DIM] = action / M_IN_K / M_IN_K
+        state[7, :A_DIM] = action / np.max(VIDEO_BIT_RATE)
 
         assert not np.any(np.isnan(state)), "Inputs têm valores NaN"
         assert not np.any(np.isinf(state)), "Inputs têm valores infinitos"

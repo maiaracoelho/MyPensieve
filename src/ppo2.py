@@ -16,109 +16,77 @@ EPS = 0.2
 class Network:
     def CreateNetwork(self, inputs):
         with tf.variable_scope("actor"):
+            split_0 = tflearn.fully_connected(inputs[:, 0:1, :], FEATURE_NUM, activation="relu")
+            split_1 = tflearn.fully_connected(inputs[:, 1:2, :], FEATURE_NUM, activation="relu")
 
-            split_0 = tflearn.fully_connected(
-                inputs[:, 0:1, -1], FEATURE_NUM, activation="relu"
-            )
-            split_1 = tflearn.fully_connected(
-                inputs[:, 1:2, -1], FEATURE_NUM, activation="relu"
-            )
-            split_2 = tflearn.conv_1d(
-                inputs[:, 2:3, :], FEATURE_NUM, 1, activation="relu"
-            )
-            split_3 = tflearn.conv_1d(
-                inputs[:, 3:4, :], FEATURE_NUM, 1, activation="relu"
-            )
-            split_4 = tflearn.conv_1d(
-                inputs[:, 4:5, :], FEATURE_NUM, 1, activation="relu"
-            )
-            split_5 = tflearn.conv_1d(
-                inputs[:, 5:6, : self.a_dim], FEATURE_NUM, 1, activation="relu"
-            )
+            split_2 = tf.reshape(inputs[:, 2:3, :], [-1, 1, inputs.shape[2]])  # reshape para conv_1d
+            split_2 = tflearn.conv_1d(split_2, FEATURE_NUM, 1, activation="relu")
 
-            split_6 = tflearn.conv_1d(
-                inputs[:, 5:6, : self.a_dim], FEATURE_NUM, 1, activation="relu"
-            )
+            split_3 = tf.reshape(inputs[:, 3:4, :self.a_dim], [-1, 1, self.a_dim])
+            split_3 = tflearn.conv_1d(split_3, FEATURE_NUM, 1, activation="relu")
 
-            split_7 = tflearn.fully_connected(
-                inputs[:, 7:8, -1], FEATURE_NUM, activation="relu"
-            )
+            split_4 = tf.reshape(inputs[:, 4:5, :], [-1, 1, inputs.shape[2]])
+            split_4 = tflearn.conv_1d(split_4, FEATURE_NUM, 1, activation="relu")
 
-            split_2_flat = tflearn.flatten(split_2)
-            split_3_flat = tflearn.flatten(split_3)
-            split_4_flat = tflearn.flatten(split_4)
-            split_5_flat = tflearn.flatten(split_5)
-            split_6_flat = tflearn.flatten(split_6)
+            split_5 = tf.reshape(inputs[:, 5:6, :], [-1, 1, inputs.shape[2]])
+            split_5 = tflearn.conv_1d(split_5, FEATURE_NUM, 1, activation="relu")
 
-            merge_net = tflearn.merge(
-                [
-                    split_0,
-                    split_1,
-                    split_2_flat,
-                    split_3_flat,
-                    split_4_flat,
-                    split_5_flat,
-                    split_6_flat,
-                    split_7,
-                ],
-                "concat",
-            )
+            split_6 = tf.reshape(inputs[:, 6:7, :], [-1, 1, inputs.shape[2]])
+            split_6 = tflearn.conv_1d(split_6, FEATURE_NUM, 1, activation="relu")
+
+            split_7 = tflearn.fully_connected(inputs[:, 7:8, :self.a_dim], FEATURE_NUM, activation="relu")
+
+            merge_net = tflearn.merge([
+            split_0,
+            split_1,
+            tflearn.flatten(split_2),
+            tflearn.flatten(split_3),
+            tflearn.flatten(split_4),
+            tflearn.flatten(split_5),
+            tflearn.flatten(split_6),
+            split_7,
+            ], "concat")
 
             pi_net = tflearn.fully_connected(merge_net, FEATURE_NUM, activation="relu")
             pi = tflearn.fully_connected(pi_net, self.a_dim, activation="softmax")
 
         with tf.variable_scope("critic"):
-            split_0 = tflearn.fully_connected(
-                inputs[:, 0:1, -1], FEATURE_NUM, activation="relu"
-            )
-            split_1 = tflearn.fully_connected(
-                inputs[:, 1:2, -1], FEATURE_NUM, activation="relu"
-            )
-            split_2 = tflearn.conv_1d(
-                inputs[:, 2:3, :], FEATURE_NUM, 1, activation="relu"
-            )
-            split_3 = tflearn.conv_1d(
-                inputs[:, 3:4, :], FEATURE_NUM, 1, activation="relu"
-            )
-            split_4 = tflearn.conv_1d(
-                inputs[:, 4:5, :], FEATURE_NUM, 1, activation="relu"
-            )
-            split_5 = tflearn.conv_1d(
-                inputs[:, 5:6, : self.a_dim], FEATURE_NUM, 1, activation="relu"
-            )
+            split_0 = tflearn.fully_connected(inputs[:, 0:1, :], FEATURE_NUM, activation="relu")
+            split_1 = tflearn.fully_connected(inputs[:, 1:2, :], FEATURE_NUM, activation="relu")
 
-            split_6 = tflearn.conv_1d(
-                inputs[:, 5:6, : self.a_dim], FEATURE_NUM, 1, activation="relu"
-            )
+            split_2 = tf.reshape(inputs[:, 2:3, :], [-1, 1, inputs.shape[2]])
+            split_2 = tflearn.conv_1d(split_2, FEATURE_NUM, 1, activation="relu")
 
-            split_7 = tflearn.fully_connected(
-                inputs[:, 7:8, -1], FEATURE_NUM, activation="relu"
-            )
+            split_3 = tf.reshape(inputs[:, 3:4, :self.a_dim], [-1, 1, self.a_dim])
+            split_3 = tflearn.conv_1d(split_3, FEATURE_NUM, 1, activation="relu")
 
-            split_2_flat = tflearn.flatten(split_2)
-            split_3_flat = tflearn.flatten(split_3)
-            split_4_flat = tflearn.flatten(split_4)
-            split_5_flat = tflearn.flatten(split_5)
-            split_6_flat = tflearn.flatten(split_6)
+            split_4 = tf.reshape(inputs[:, 4:5, :], [-1, 1, inputs.shape[2]])
+            split_4 = tflearn.conv_1d(split_4, FEATURE_NUM, 1, activation="relu")
 
-            merge_net = tflearn.merge(
-                [
-                    split_0,
-                    split_1,
-                    split_2_flat,
-                    split_3_flat,
-                    split_4_flat,
-                    split_5_flat,
-                    split_6_flat,
-                    split_7,
-                ],
-                "concat",
-            )
-            value_net = tflearn.fully_connected(
-                merge_net, FEATURE_NUM, activation="relu"
-            )
+            split_5 = tf.reshape(inputs[:, 5:6, :], [-1, 1, inputs.shape[2]])
+            split_5 = tflearn.conv_1d(split_5, FEATURE_NUM, 1, activation="relu")
+
+            split_6 = tf.reshape(inputs[:, 6:7, :], [-1, 1, inputs.shape[2]])
+            split_6 = tflearn.conv_1d(split_6, FEATURE_NUM, 1, activation="relu")
+
+            split_7 = tflearn.fully_connected(inputs[:, 7:8, :self.a_dim], FEATURE_NUM, activation="relu")
+
+            merge_net = tflearn.merge([
+            split_0,
+            split_1,
+            tflearn.flatten(split_2),
+            tflearn.flatten(split_3),
+            tflearn.flatten(split_4),
+            tflearn.flatten(split_5),
+            tflearn.flatten(split_6),
+            split_7,
+            ], "concat")
+
+            value_net = tflearn.fully_connected(merge_net, FEATURE_NUM, activation="relu")
             value = tflearn.fully_connected(value_net, 1, activation="linear")
-            return pi, value
+
+        return pi, value
+
 
     def get_network_params(self):
         return self.sess.run(self.network_params)

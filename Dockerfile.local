@@ -1,0 +1,27 @@
+FROM nvidia/cuda:11.2.2-cudnn8-runtime-ubuntu20.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Instala Python e dependências
+RUN apt-get update && apt-get install -y \
+    python3.8 python3-pip python3-dev build-essential git \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Alias para python e pip
+RUN [ ! -e /usr/bin/python ] && ln -s /usr/bin/python3.8 /usr/bin/python || true
+RUN [ ! -e /usr/bin/pip ] && ln -s /usr/bin/pip3 /usr/bin/pip || true
+
+# Diretório de trabalho
+WORKDIR /workspace/app
+
+# Copia arquivos do projeto
+COPY . .
+
+# Copia requirements
+COPY requirements.txt .
+
+# Instala dependências
+RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.local.txt
+
+# Comando default (ajuste conforme seu projeto)
+CMD ["python", "src/train.py"]
