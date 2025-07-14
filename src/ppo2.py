@@ -16,76 +16,21 @@ EPS = 0.2
 class Network:
     def CreateNetwork(self, inputs):
         with tf.variable_scope("actor"):
-            split_0 = tflearn.fully_connected(inputs[:, 0:1, :], FEATURE_NUM, activation="relu")
-            split_1 = tflearn.fully_connected(inputs[:, 1:2, :], FEATURE_NUM, activation="relu")
-
-            split_2 = tf.reshape(inputs[:, 2:3, :], [-1, 1, inputs.shape[2]])  # reshape para conv_1d
-            split_2 = tflearn.conv_1d(split_2, FEATURE_NUM, 1, activation="relu")
-
-            split_3 = tf.reshape(inputs[:, 3:4, :self.a_dim], [-1, 1, self.a_dim])
-            split_3 = tflearn.conv_1d(split_3, FEATURE_NUM, 1, activation="relu")
-
-            split_4 = tf.reshape(inputs[:, 4:5, :], [-1, 1, inputs.shape[2]])
-            split_4 = tflearn.conv_1d(split_4, FEATURE_NUM, 1, activation="relu")
-
-            split_5 = tf.reshape(inputs[:, 5:6, :], [-1, 1, inputs.shape[2]])
-            split_5 = tflearn.conv_1d(split_5, FEATURE_NUM, 1, activation="relu")
-
-            split_6 = tf.reshape(inputs[:, 6:7, :], [-1, 1, inputs.shape[2]])
-            split_6 = tflearn.conv_1d(split_6, FEATURE_NUM, 1, activation="relu")
-
-            split_7 = tflearn.fully_connected(inputs[:, 7:8, :self.a_dim], FEATURE_NUM, activation="relu")
-
-            merge_net = tflearn.merge([
-            split_0,
-            split_1,
-            tflearn.flatten(split_2),
-            tflearn.flatten(split_3),
-            tflearn.flatten(split_4),
-            tflearn.flatten(split_5),
-            tflearn.flatten(split_6),
-            split_7,
-            ], "concat")
-
-            pi_net = tflearn.fully_connected(merge_net, FEATURE_NUM, activation="relu")
-            pi = tflearn.fully_connected(pi_net, self.a_dim, activation="softmax")
+            lstm_out = tflearn.lstm(inputs, FEATURE_NUM, dropout=0.5)
+            fc1 = tflearn.fully_connected(lstm_out, FEATURE_NUM * 2, activation="relu")
+            fc1 = tflearn.dropout(fc1, 0.5)
+            fc2 = tflearn.fully_connected(fc1, FEATURE_NUM, activation="relu")
+            pi = tflearn.fully_connected(fc2, self.a_dim, activation="softmax")
 
         with tf.variable_scope("critic"):
-            split_0 = tflearn.fully_connected(inputs[:, 0:1, :], FEATURE_NUM, activation="relu")
-            split_1 = tflearn.fully_connected(inputs[:, 1:2, :], FEATURE_NUM, activation="relu")
-
-            split_2 = tf.reshape(inputs[:, 2:3, :], [-1, 1, inputs.shape[2]])
-            split_2 = tflearn.conv_1d(split_2, FEATURE_NUM, 1, activation="relu")
-
-            split_3 = tf.reshape(inputs[:, 3:4, :self.a_dim], [-1, 1, self.a_dim])
-            split_3 = tflearn.conv_1d(split_3, FEATURE_NUM, 1, activation="relu")
-
-            split_4 = tf.reshape(inputs[:, 4:5, :], [-1, 1, inputs.shape[2]])
-            split_4 = tflearn.conv_1d(split_4, FEATURE_NUM, 1, activation="relu")
-
-            split_5 = tf.reshape(inputs[:, 5:6, :], [-1, 1, inputs.shape[2]])
-            split_5 = tflearn.conv_1d(split_5, FEATURE_NUM, 1, activation="relu")
-
-            split_6 = tf.reshape(inputs[:, 6:7, :], [-1, 1, inputs.shape[2]])
-            split_6 = tflearn.conv_1d(split_6, FEATURE_NUM, 1, activation="relu")
-
-            split_7 = tflearn.fully_connected(inputs[:, 7:8, :self.a_dim], FEATURE_NUM, activation="relu")
-
-            merge_net = tflearn.merge([
-            split_0,
-            split_1,
-            tflearn.flatten(split_2),
-            tflearn.flatten(split_3),
-            tflearn.flatten(split_4),
-            tflearn.flatten(split_5),
-            tflearn.flatten(split_6),
-            split_7,
-            ], "concat")
-
-            value_net = tflearn.fully_connected(merge_net, FEATURE_NUM, activation="relu")
-            value = tflearn.fully_connected(value_net, 1, activation="linear")
+            lstm_out_v = tflearn.lstm(inputs, FEATURE_NUM, dropout=0.5)
+            fc1_v = tflearn.fully_connected(lstm_out_v, FEATURE_NUM * 2, activation="relu")
+            fc1_v = tflearn.dropout(fc1_v, 0.5)
+            fc2_v = tflearn.fully_connected(fc1_v, FEATURE_NUM, activation="relu")
+            value = tflearn.fully_connected(fc2_v, 1, activation="linear")
 
         return pi, value
+
 
 
     def get_network_params(self):
@@ -169,10 +114,13 @@ class Network:
         )
 
     def predict(self, input):
+        assert input.shape[1:] == (self.s_dim[1], self.s_dim[0]), f"Esperado shape (S_LEN, S_INFO), recebeu {input.shape[1:]}"
+
         action = self.sess.run(self.real_out, feed_dict={self.inputs: input})
         return action[0]
 
     def train(self, s_batch, a_batch, p_batch, v_batch, epoch):
+
         self.sess.run(
             [self.policy_opt, self.val_opt],
             feed_dict={

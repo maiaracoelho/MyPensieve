@@ -170,7 +170,10 @@ def run_algorithm(algorithm, traces=TEST_TRACES):
                 "video_chunk_size": video_chunk_size,
                 "next_video_chunk_sizes": next_video_chunk_sizes,
                 "action": bitrate_arrays,
+                "binary_action": recommended_rates,
+                "is_bit_rate_available": float(VIDEO_BIT_RATE[bit_rate] in action),
                 "throughput": throughput_kbps,
+                "delay_factor": delay_factor,
             }
 
             reward = rew.calculate_reward(data, mode, scen)
@@ -181,29 +184,29 @@ def run_algorithm(algorithm, traces=TEST_TRACES):
             # log time_stamp, bit_rate, buffer_size, reward
             log_file.write(
                 "\n"
-                + str(time_s)
-                + ","
-                + str(VIDEO_BIT_RATE[bit_rate])
-                + ","
-                + str(buffer_size_s)
-                + ","
-                + str(rebuf_s)
-                + ","
-                + str(video_chunk_size)
-                + ","
-                + str(delay_ms / M_IN_K)
-                + ","
-                + str(throughput_kbps)
-                + ","
-                + str(action)
-                + ","
-                + str(qoe)
-                + ","
-                + str(cost)
-                + ","
-                + str(entropy_)
-                + ","
-                + str(reward)
+                    + str(time_s)
+                    + ","
+                    + str(VIDEO_BIT_RATE[bit_rate])
+                    + ","
+                    + str(buffer_size_s)
+                    + ","
+                    + str(rebuf_s)
+                    + ","
+                    + str(video_chunk_size)
+                    + ","
+                    + str(delay_ms / M_IN_K)
+                    + ","
+                    + str(throughput_kbps)
+                    + ","
+                    + str(action)
+                    + ","
+                    + str(qoe)
+                    + ","
+                    + str(cost)
+                    + ","
+                    + str(entropy_)
+                    + ","
+                    + str(reward)
             )
             log_file.flush()
 
@@ -221,18 +224,16 @@ def run_algorithm(algorithm, traces=TEST_TRACES):
                 np.max(VIDEO_BIT_RATE)
             )  # last quality
             state[1, -1] = buffer_size_s / BUFFER_NORM_FACTOR
-            state[2, -1] = (
-                float(video_chunk_size) / float(delay_ms) / M_IN_K
-            )  # kilo byte / ms
-            state[3, -1] = float(delay_ms) / M_IN_K / BUFFER_NORM_FACTOR  # 10 sec
-            state[4, :A_DIM] = (
-                np.array(next_video_chunk_sizes) / M_IN_K / M_IN_K
+            state[2, -1] = float(video_chunk_size) / ((float(delay_ms) + 1e-6) / M_IN_K)
+            state[3, -1] = np.clip((float(delay_ms) / M_IN_K) / BUFFER_NORM_FACTOR, 0.0, 1.0)
+            state[4, :A_DIM] = ((
+                np.array(next_video_chunk_sizes) / M_IN_K) / M_IN_K
             )  # mega byte
             state[5, -1] = np.minimum(
                 video_chunk_remain, CHUNK_TIL_VIDEO_END_CAP
             ) / float(CHUNK_TIL_VIDEO_END_CAP)
-            state[6, -1] = rebuf_s / BUFFER_NORM_FACTOR  # 10 sec
-            state[7, :A_DIM] = action / np.max(VIDEO_BIT_RATE)
+            state[6, -1] = rebuf_s / BUFFER_NORM_FACTOR
+            state[7, :A_DIM] = recommended_rates
             assert not np.any(np.isnan(state)), "Inputs têm valores NaN"
             assert not np.any(np.isinf(state)), "Inputs têm valores infinitos"
 

@@ -14,7 +14,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # GPU somente no central_agent
 S_DIM = [8, 8]
 A_DIM = 6
 ACTOR_LR_RATE = 1e-4
-NUM_AGENTS = 16
+NUM_AGENTS = 10
 TRAIN_SEQ_LEN = 30
 TRAIN_EPOCH = 500
 MODEL_SAVE_INTERVAL = 100
@@ -23,7 +23,7 @@ SUMMARY_DIR = "ppo"
 TEST_LOG_FOLDER = "test_results/"
 LOG_FILE = SUMMARY_DIR + "/log"
 PPO_TRAINING_EPO = 3
-ALGORITHM = "lolypop"  ## bb|stallion|lolypop
+ALGORITHM = "bb"  ## bb|stallion|lolypop
 MODE = "qoeCost"  ## qoep|qoer|qoeCost
 SCEN = "learn"  ## edge|cloud|learn
 
@@ -91,17 +91,19 @@ def testing(epoch, nn_model, log_file):
 
     # Estatísticas das recompensas
     rewards = np.array(rewards)
+    entropies = np.array(entropies)
+    entropies_min = np.min(entropies)
     rewards_min = np.min(rewards)
-    rewards_5per = np.percentile(rewards, 5)
     rewards_mean = np.mean(rewards)
-    rewards_median = np.percentile(rewards, 50)
-    rewards_95per = np.percentile(rewards, 95)
+    entropies_mean = np.mean(entropies)
+    rewards_std = np.std(rewards)
     rewards_max = np.max(rewards)
+    entropies_max = np.max(entropies)
 
     # Escrevendo no arquivo de log
     log_file.write(
-        f"{epoch}\t{rewards_min:.2f}\t{rewards_5per:.2f}\t{rewards_mean:.2f}"
-        f"\t{rewards_median:.2f}\t{rewards_95per:.2f}\t{rewards_max:.2f}\n"
+        f"{epoch}\t{rewards_min:.2f}\t{entropies_min:.2f}\t{rewards_mean:.2f}"
+        f"\t{entropies_mean:.2f}\t{rewards_max:.2f}\t{entropies_max:.2f}\n"
     )
     log_file.flush()
     print(
@@ -167,6 +169,9 @@ def central_agent(net_params_queues, exp_queues):
                 p_batch = np.vstack(p)
                 v_batch = np.vstack(g)
 
+                #s_batch = np.transpose(s_batch, (0, 2, 1)) # incluindo adaptação para lstm
+
+
                 for _ in range(PPO_TRAINING_EPO):
                     actor.train(s_batch, a_batch, p_batch, v_batch, epoch)
 
@@ -214,23 +219,21 @@ def agent(agent_id, net_params_queue, exp_queue):
                 s_batch, a_batch, p_batch, r_batch = [], [], [], []
 
                 for step in range(TRAIN_SEQ_LEN):
-                    s_batch.append(obs)
+                    #s_batch.append(obs)
 
-                    action_prob = actor.predict(
-                        np.reshape(obs, (1, S_DIM[0], S_DIM[1]))
-                    ).flatten()
+                    obs_lstm = np.transpose(obs, (1, 0))  # [S_LEN, S_INFO]
+                    obs_lstm = np.expand_dims(obs_lstm, axis=0)  # [1, S_LEN, S_INFO]
+
+
+                    action_prob = actor.predict(obs_lstm).flatten()
                     noisy_action_prob = calculate_action_probabilities(action_prob)
                     decisions_eval = sample_actions_from_probabilities(noisy_action_prob)
-
-                    if SCEN == "learn":
-                        recommended = decisions_eval
-                    else:
-                        recommended = decisions_eval  # o próprio ambiente vai decidir
 
                     obs, rew, done, info, action_vec = env.step(decisions_eval)
                     assert not np.any(np.isnan(obs)), "obs contém valores NaN"
                     assert not np.any(np.isinf(obs)), "obs contém valores infinitos"
 
+                    s_batch.append(np.transpose(obs, (1, 0)))
                     a_batch.append(action_vec)
                     r_batch.append(rew)
                     p_batch.append(action_prob)
@@ -243,6 +246,7 @@ def agent(agent_id, net_params_queue, exp_queue):
 
                 actor_net_params = net_params_queue.get()
                 actor.set_network_params(actor_net_params)
+
     except Exception as e:
         import traceback
         print(f"❌ Erro no agent {agent_id}:", flush=True)

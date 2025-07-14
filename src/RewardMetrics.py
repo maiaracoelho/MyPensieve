@@ -1,7 +1,7 @@
 import numpy as np
 import math
 
-pesos = [0.15, 0.2, 0.15, 0.50]
+pesos = [0.25, 0.25, 0.10, 0.40]
 pesos1 = [0.50, 0.50]
 ALPHA = 0.7
 REBUF_PENALTY = 4.3  # 1 sec rebuffering -> 3 Mbps
@@ -10,7 +10,7 @@ SEXP = 0.5
 BETA_DELAY = 2.0
 GAMMA_REBUF = 0.5
 COST = {
-    300: {"c": 0.1, "j": 0.05},
+    300: {"c": 0.5, "j": 0.05},
     750: {"c": 0.2, "j": 0.1},
     1200: {"c": 0.4, "j": 0.2},
     1850: {"c": 0.6, "j": 0.3},
@@ -34,20 +34,21 @@ class RewardMetrics:
         segment_size = float(data["video_chunk_size"])
         bit_rate = data["bit_rate"]
         next_video_chunk_sizes = data["next_video_chunk_sizes"]
+        delay_factor = data["delay_factor"]
         cost = 0.0
         if scen=="edge":
             for i, rate in enumerate(COST.keys()):
                 seg_size_i = next_video_chunk_sizes[i]
-                cost += (COST[rate]["c"] + COST[rate]["j"]) * seg_size_i
+                cost += delay_factor * COST[rate]["j"] * seg_size_i
         elif scen=="cloud":
-            cost = (COST[bit_rate]["c"] + COST[bit_rate]["j"]) * segment_size
+            cost = delay_factor * COST[bit_rate]["j"] * segment_size
         else:
-            cost = (COST[bit_rate]["c"] + COST[bit_rate]["j"]) * segment_size
+            cost = delay_factor * COST[bit_rate]["j"] * segment_size
 
         maxCost = 0.0
         for i, rate in enumerate(COST.keys()):
             seg_size_i = next_video_chunk_sizes[i]
-            maxCost += (COST[rate]["c"] + COST[rate]["j"]) * seg_size_i
+            maxCost += delay_factor * COST[rate]["j"] * seg_size_i
 
         if maxCost < 1e-8:
             return 0.0
